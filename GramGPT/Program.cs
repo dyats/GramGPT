@@ -1,4 +1,5 @@
 ﻿using GramGPT;
+using GramGPT.Models;
 using System.Text;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -8,9 +9,16 @@ using GPTMessage = GramGPT.Models.Message;
 Console.InputEncoding = Encoding.UTF8;
 Console.OutputEncoding = Encoding.UTF8;
 
+string apiKey = "<api-key>";
+
 var botClient = new TelegramBotClient("<bot-token>");
 
 using var cts = new CancellationTokenSource();
+
+var conversationHistory = new List<GPTMessage>
+{
+    new GPTMessage { Role = Role.System, Content = "You are a helpful assistant." },
+};
 
 botClient.StartReceiving(
     updateHandler: HandleUpdate,
@@ -27,17 +35,17 @@ async Task HandleUpdate(ITelegramBotClient botClient, Update update, Cancellatio
 {
     if (update.Type == UpdateType.Message && update.Message.Type == MessageType.Text)
     {
+        // Get user's message and add it to conversation history
         var message = update.Message;
+        conversationHistory.Add(new GPTMessage { Role = Role.User, Content = message.Text });
         await Console.Out.WriteLineAsync($"\nUser: {update.Message.Chat.FirstName}, message: {message.Text}");
 
-        string apiKey = "<api-key>";
-        var messages = new List<GPTMessage>
-        {
-            new GPTMessage { Role = "system", Content = "You are a helpful assistant." },
-            new GPTMessage { Role = "user", Content = message.Text }
-        };
+        // indicates that request is IN PROGRESS
+        await botClient.SendChatActionAsync(update.Message.Chat.Id, ChatAction.Typing, cancellationToken);
 
-        string responseText = await GPTService.CallChatGPTAsync(apiKey, messages);
+        // Get response from GPT and add it to conversation history
+        string responseText = await GPTService.CallChatGPTAsync(apiKey, conversationHistory);
+        conversationHistory.Add(new GPTMessage { Role = Role.Assistant, Content = responseText });
         await Console.Out.WriteLineAsync($"Response from chat: {responseText}");
 
         await botClient.SendTextMessageAsync(message.Chat.Id, $"Response from chat:\n\n{responseText}");
